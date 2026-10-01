@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recurve — Motor de previsión de demanda</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="navbar">
+    <div class="brand"><span class="mark" aria-hidden="true"></span>RECURVE</div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Recurve proyecta la demanda semanal de tus servicios antes de que llegue.</h1>
+    <p>Define el patrón, deja que el motor derive la fórmula, y compara ambos caminos en vivo.</p>
+  </div>
+</header>
+
+<section class="console">
+  <div class="wrap">
+    <div class="console-grid">
+      <div class="panel-controls">
+        <div class="toggle-label">Orden de la recurrencia
+          <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda sobre el orden" data-tip="Cuántas semanas anteriores usa el modelo para calcular la actual. Orden 2 mira 2 semanas atrás, orden 3 mira 3.">ⓘ</span>
+        </div>
+        <div class="order-toggle" role="group" aria-label="Orden de la recurrencia" style="--idx:0;">
+          <div class="toggle-pill" aria-hidden="true"></div>
+          <button type="button" data-order="1" aria-pressed="true">Orden 1</button>
+          <button type="button" data-order="2" aria-pressed="false">Orden 2</button>
+          <button type="button" data-order="3" aria-pressed="false">Orden 3 · Reto</button>
+        </div>
+
+        <div id="dynamicFields"></div>
+
+        <div class="field-group">
+          <label for="nInput">Semanas a proyectar (n)
+            <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Cuántos términos de la sucesión quieres generar y graficar.">ⓘ</span>
+          </label>
+          <input type="number" id="nInput" value="20" min="4" max="120">
+        </div>
+
+        <div class="field-group">
+          <label for="benchTerm">Término objetivo del benchmark
+            <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Término que se usa para medir tiempo. Tiene tope: la recursión pura repite cálculos y crece muy rápido con n.">ⓘ</span>
+          </label>
+          <input type="number" id="benchTerm" value="18" min="2" max="30">
+        </div>
+        <div class="field-group">
+          <label for="repsInput">Repeticiones del benchmark
+            <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Cuántas veces se repite el cálculo para que el tiempo sea medible (un solo cálculo es demasiado rápido para cronometrar).">ⓘ</span>
+          </label>
+          <input type="number" id="repsInput" value="300" min="10" max="5000">
+        </div>
+
+        <button class="run-btn" id="runBtn">Generar proyección</button>
+        <div class="warn-msg" id="warnMsg"></div>
+      </div>
+
+      <div class="panel-results light-ctx">
+        <div class="status-card reveal-block" id="statusCard">
+          <span class="status-icon" id="statusIcon">—</span>
+          <div>
+            <div class="status-label" id="statusLabel">Genera una proyección para ver el estado</div>
+            <div class="status-msg" id="statusMsg">Este resumen se lee en un vistazo, sin necesidad de entender la fórmula.</div>
+          </div>
+        </div>
+
+        <div class="fb-label">Fórmula explícita
+          <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Derivada automáticamente resolviendo la ecuación característica. Entrega cualquier término directo, sin pasar por los anteriores.">ⓘ</span>
+        </div>
+        <div class="formula-box" id="formulaOut"></div>
+
+        <div class="chart-wrap reveal-block" style="animation-delay:40ms;">
+          <div class="chart-title">
+            <span class="title-left">Recurrente vs. explícita
+              <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Las dos curvas deberían coincidir exactamente: son el mismo patrón calculado de dos formas distintas.">ⓘ</span>
+            </span>
+            <button type="button" class="isolate-btn" id="isolateBtn">Aislar explícita</button>
+          </div>
+          <canvas id="seqChart" height="110"></canvas>
+        </div>
+
+        <div class="verify-row">
+          <span class="badge ok" id="verifyBadge" style="display:none;">✓ Coinciden en los n términos</span>
+          <span class="detail" id="verifyDetail"></span>
+        </div>
+
+        <div class="bench-grid reveal-block" style="animation-delay:80ms;">
+          <div class="bench-card">
+            <div class="bc-label">Recursión pura
+              <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Se llama a sí misma desde cero en cada paso, sin guardar resultados previos. Por eso crece tan rápido.">ⓘ</span>
+            </div>
+            <div class="bc-value" id="benchRec">—</div>
+            <div class="bar-track"><div class="bar-fill" id="barRec" style="background:var(--sun);"></div></div>
+          </div>
+          <div class="bench-card">
+            <div class="bc-label">Fórmula explícita
+              <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Evalúa la fórmula cerrada directo: tiempo prácticamente constante sin importar qué tan lejos esté el término.">ⓘ</span>
+            </div>
+            <div class="bc-value" id="benchExp">—</div>
+            <div class="bar-track"><div class="bar-fill" id="barExp" style="background:var(--turq);"></div></div>
+          </div>
+        </div>
+        <p class="bench-note" id="speedupNote">Corre el simulador para comparar tiempos.</p>
+
+        <div class="terms-scroll reveal-block" style="animation-delay:120ms;">
+          <table class="terms">
+            <thead>
+              <tr>
+                <th>n</th><th>Recurrente</th><th>Explícita</th>
+                <th><span class="th-inner">Diferencia
+                  <span class="info-tip" tabindex="0" role="button" aria-label="Ayuda" data-tip="Debería ser (casi) cero: confirma que ambos métodos concuerdan.">ⓘ</span>
+                </span></th>
+              </tr>
+            </thead>
+            <tbody id="termsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-row">
+    <div>Recurve · Herramienta interna de previsión de demanda</div>
+    <div>v1.0</div>
+  </div>
+</footer>
+
+<div class="modal-overlay" id="modalOverlay" role="presentation">
+  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h3 id="modalTitle">Proceso</h3>
+      <button type="button" class="modal-close" id="modalClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="tip-bubble" id="sharedTipBubble" role="tooltip" aria-hidden="true"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
